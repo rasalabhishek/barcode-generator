@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code-128 Label Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #1b1d1e;
+    --panel: #232628;
+    --panel-2: #2b2f31;
+    --border: #3a3e40;
+    --text: #e7e6e2;
+    --muted: #9aa0a0;
+    --accent: #ff6a13;
+    --ok: #4caf6a;
+    --err: #e5484d;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+  header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+  }
+  .brand{ display:flex; align-items:center; gap: 12px; }
+  .brand-mark{
+    width: 34px; height: 34px;
+    border: 2px solid var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px; font-weight:600;
+    color: var(--accent);
+    flex-shrink:0;
+  }
+  h1{
+    font-family:'Oswald', sans-serif;
+    font-weight:600;
+    font-size: 26px;
+    letter-spacing: 0.02em;
+    margin:0;
+    text-transform: uppercase;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .spec{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    text-align:right;
+    line-height: 1.6;
+  }
+  .spec b{ color: var(--text); font-weight: 600;}
+
+  .layout{
+    display:grid;
+    grid-template-columns: 380px 1fr;
+    gap: 32px;
+    align-items:start;
+  }
+  @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+  }
+  .field{ margin-bottom: 20px; }
+  .field:last-child{ margin-bottom: 0; }
+  label{
+    display:flex; justify-content:space-between; align-items:baseline;
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  label .tag{ color: var(--accent); font-weight:600; }
+  input[type=text]{
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family:'JetBrains Mono', monospace;
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  input[type=text]:focus{ border-color: var(--accent); }
+  input[type=text].invalid{ border-color: var(--err); }
+  .msg{ margin-top: 6px; font-size: 11.5px; font-family:'JetBrains Mono', monospace; min-height: 15px; }
+  .msg.ok{ color: var(--ok); }
+  .msg.err{ color: var(--err); }
+  .msg.hint{ color: var(--muted); }
+
+  .actions{ display:flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+  button{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11.5px; letter-spacing: 0.05em; text-transform: uppercase;
+    padding: 11px 16px; border-radius: 3px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); cursor: pointer;
+    transition: all 0.15s ease; flex: 1; min-width: 100px;
+  }
+  button:hover{ border-color: var(--accent); color: var(--accent); }
+  button.primary{ background: var(--accent); border-color: var(--accent); color: #1b1d1e; font-weight: 600; }
+  button.primary:hover{ background: #ff7d33; color: #1b1d1e; }
+  button:active{ transform: translateY(1px); }
+
+  /* ---- Label stage ---- */
+  .stage{ display:flex; flex-direction: column; align-items:center; padding: 20px 0; }
+
+  .label-frame{
+    position: relative;
+    width: 100%;
+    max-width: 720px;
+    aspect-ratio: 20 / 11; /* ~10% taller than 2/1 so the barcode rows get proportionally more height */
+    background:
+      radial-gradient(120% 140% at 20% 0%, rgba(255,255,255,0.55), rgba(255,255,255,0) 55%),
+      linear-gradient(155deg, #e9edf0 0%, #dde2e6 45%, #e5e9ec 100%);
+    border-radius: 3px;
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
+    padding: 22px 26px 18px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  /* perforated right edge like the photo */
+  .label-frame::after{
+    content:'';
+    position:absolute;
+    top:0; right:0; bottom:0;
+    width: 10px;
+    background-image: radial-gradient(circle, #b9c0c5 2.2px, transparent 2.4px);
+    background-size: 10px 14px;
+    background-position: center;
+    opacity: 0.7;
+  }
+
+  .ref-line{
+    font-family:'Space Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(18px, 3.4vw, 26px);
+    color: #16181a;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    margin-bottom: 6px;
+    min-height: 1.1em;
+    text-align: left;
+  }
+  .ref-line.placeholder{ color: #aab0b4; font-weight: 400; }
+
+  .barcode-row{
+    display:flex;
+    align-items:flex-start;
+    justify-content:flex-start;
+    flex: 1 1 0;
+    height: 0; /* flex-basis 0 via height so both barcode rows split remaining space exactly evenly */
+  }
+  .barcode-svg{ width: 70%; height: 100%; max-width: 100%; display:block; margin:0; transform-origin: left top; }
+  #serialSvg{ width: 75%; max-width: 75%; } /* S/N barcode: 25% shorter */
+  #partSvg{ width: 80%; max-width: 80%; }   /* P/N barcode: 20% shorter */
+  .barcode-placeholder{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: #9aa2a7;
+    text-align:center;
+    width:100%;
+  }
+
+  .caption-row{
+    display:flex;
+    align-items:center;
+    justify-content:flex-start;
+    text-align:left;
+    gap: 14px;
+    height: 76px;
+    flex: 0 0 auto;
+    box-sizing: border-box;
+  }
+  .caption-tag{
+    font-family:'Space Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(16px, 2.6vw, 20px);
+    color: #16181a;
+    flex-shrink:0;
+  }
+  .caption-value{
+    font-family:'Space Mono', monospace;
+    font-weight: 700;
+    font-size: clamp(16px, 3vw, 24px);
+    color: #16181a;
+    letter-spacing: 0.06em;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .caption-value.placeholder{ color: #aab0b4; font-weight: 400; letter-spacing:0.03em; }
+  .caption-row.boxed .caption-value{
+    border: 2.5px solid #16181a;
+    width: 17ch;
+    flex: 0 0 auto;
+    text-align: center;
+    padding: 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .caption-row.boxed .caption-value.placeholder{
+    border-color: #b7bcbf;
+  }
+  .caption-row.pn-row .caption-tag{
+    margin-right: 3ch;
+  }
+
+  .stage-caption{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 16px;
+    text-align:center;
+    max-width: 460px;
+    line-height: 1.5;
+  }
+
+  .footer-credit{
+    font-family:'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <div class="brand-mark">128</div>
+      <div>
+        <h1>Barcode Label Studio</h1>
+        <div class="eyebrow">Code&#8209;128 &middot; Serial / Part Label</div>
+      </div>
+    </div>
+    <div class="spec">
+      SYMBOLOGY: <b>CODE 128</b><br>
+      CHARSET: <b>Alphanumeric (ASCII)</b><br>
+      OUTPUT: <b>JPG label export</b>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- CONTROLS -->
+    <div class="panel">
+      <div class="field">
+        <label>Reference / Model <span class="tag">TOP LINE</span></label>
+        <input type="text" id="refInput" placeholder="e.g. 15-fd1353TU" autocomplete="off" spellcheck="false">
+        <div class="msg hint" id="refMsg">Optional text line, no barcode — matches the model line on the label.</div>
+      </div>
+
+      <div class="field">
+        <label>Serial Number <span class="tag">S/N</span></label>
+        <input type="text" id="serialInput" placeholder="e.g. 5CD549CQJY" autocomplete="off" spellcheck="false">
+        <div class="msg hint" id="serialMsg">Type to generate the top barcode.</div>
+      </div>
+
+      <div class="field">
+        <label>Part Number <span class="tag">P/N</span></label>
+        <input type="text" id="partInput" placeholder="e.g. C72X5PA#ACJ" autocomplete="off" spellcheck="false">
+        <div class="msg hint" id="partMsg">Type to generate the bottom barcode.</div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="generateBtn">Generate</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <div class="actions">
+        <button id="downloadBtn">Download JPG</button>
+      </div>
+    </div>
+
+    <!-- LABEL PREVIEW -->
+    <div class="stage">
+      <div class="label-frame" id="labelFrame">
+
+        <div class="ref-line placeholder" id="refLine">MODEL / REF</div>
+
+        <div class="barcode-row" id="serialBarcodeRow">
+          <div class="barcode-placeholder" id="serialPlaceholder">SERIAL BARCODE</div>
+          <svg class="barcode-svg" id="serialSvg" style="display:none;"></svg>
+        </div>
+
+        <div class="caption-row boxed">
+          <span class="caption-tag">S/N</span>
+          <span class="caption-value placeholder" id="serialCaption">— — — — — — —</span>
+        </div>
+
+        <div class="barcode-row" id="partBarcodeRow">
+          <div class="barcode-placeholder" id="partPlaceholder">PART BARCODE</div>
+          <svg class="barcode-svg" id="partSvg" style="display:none;"></svg>
+        </div>
+
+        <div class="caption-row pn-row">
+          <span class="caption-tag">P/N</span>
+          <span class="caption-value placeholder" id="partCaption">— — — — — — —</span>
+        </div>
+
+      </div>
+      <div class="stage-caption">Live preview — matches the S/N boxed-caption / P/N plain-caption layout, with an optional model/reference line above, same as the source label.</div>
+    </div>
+
+  </div>
+
+  <div class="footer-credit">This project is by Abhishek Rasal</div>
+</div>
+
+<script>
+const VALID_PATTERN = /^[\x20-\x7E]*$/; // printable ASCII
+
+function validate(value){
+  if(value.trim().length === 0) return { ok:false, empty:true };
+  if(!VALID_PATTERN.test(value)) return { ok:false, empty:false, msg:'Unsupported character — use standard printable ASCII.' };
+  return { ok:true, empty:false, msg:'Valid — barcode generated.' };
+}
+
+function renderBarcode(kind, value){
+  const svg = document.getElementById(kind + 'Svg');
+  const placeholder = document.getElementById(kind + 'Placeholder');
+  const caption = document.getElementById(kind + 'Caption');
+  const msg = document.getElementById(kind + 'Msg');
+  const input = document.getElementById(kind + 'Input');
+  const result = validate(value);
+
+  if(result.empty){
+    svg.style.display = 'none';
+    placeholder.style.display = 'block';
+    caption.textContent = '— — — — — — —';
+    caption.classList.add('placeholder');
+    input.classList.remove('invalid');
+    msg.className = 'msg hint';
+    msg.textContent = kind === 'serial' ? 'Type to generate the top barcode.' : 'Type to generate the bottom barcode.';
+    return;
+  }
+  if(!result.ok){
+    svg.style.display = 'none';
+    placeholder.style.display = 'block';
+    placeholder.textContent = 'INVALID INPUT';
+    caption.textContent = value;
+    caption.classList.remove('placeholder');
+    input.classList.add('invalid');
+    msg.className = 'msg err';
+    msg.textContent = result.msg;
+    return;
+  }
+  try{
+    JsBarcode(svg, value, {
+      format: 'CODE128',
+      lineColor: '#16181a',
+      background: 'transparent',
+      width: 3.4,
+      height: 70,
+      displayValue: false,
+      margin: 0
+    });
+    placeholder.style.display = 'none';
+    svg.style.display = 'block';
+    svg.setAttribute('preserveAspectRatio', 'none'); // stop the SVG auto-centering itself; fill flush left instead
+    caption.textContent = value;
+    caption.classList.remove('placeholder');
+    input.classList.remove('invalid');
+    msg.className = 'msg ok';
+    msg.textContent = result.msg;
+  }catch(e){
+    svg.style.display = 'none';
+    placeholder.style.display = 'block';
+    placeholder.textContent = 'ENCODING ERROR';
+    input.classList.add('invalid');
+    msg.className = 'msg err';
+    msg.textContent = 'Encoding error — try a shorter value or different characters.';
+  }
+}
+
+function renderRef(value){
+  const refLine = document.getElementById('refLine');
+  if(value.trim().length === 0){
+    refLine.textContent = 'MODEL / REF';
+    refLine.classList.add('placeholder');
+  } else {
+    refLine.textContent = value;
+    refLine.classList.remove('placeholder');
+  }
+}
+
+const refInput = document.getElementById('refInput');
+const serialInput = document.getElementById('serialInput');
+const partInput = document.getElementById('partInput');
+
+refInput.addEventListener('input', () => renderRef(refInput.value));
+serialInput.addEventListener('input', () => renderBarcode('serial', serialInput.value));
+partInput.addEventListener('input', () => renderBarcode('part', partInput.value));
+
+document.getElementById('generateBtn').addEventListener('click', () => {
+  renderRef(refInput.value);
+  renderBarcode('serial', serialInput.value);
+  renderBarcode('part', partInput.value);
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  refInput.value = ''; serialInput.value = ''; partInput.value = '';
+  renderRef(''); renderBarcode('serial', ''); renderBarcode('part', '');
+  serialInput.focus();
+});
+
+// ---- Native canvas export (avoids html2canvas + webfont/CORS issues) ----
+
+function drawBarcodeOnCanvas(ctx, value, x, y, w, h){
+  const result = validate(value);
+  if(!result.ok){
+    ctx.save();
+    ctx.fillStyle = '#9aa2a7';
+    ctx.font = '400 22px "JetBrains Mono", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText(result.empty ? 'NO BARCODE DATA' : 'INVALID INPUT', x + w/2, y + h/2);
+    ctx.restore();
+    return;
+  }
+  try{
+    // Render the barcode directly onto an offscreen <canvas> via JsBarcode
+    // (avoids the SVG->Image->canvas round trip, which was silently dropping bars).
+    const barcodeCanvas = document.createElement('canvas');
+    JsBarcode(barcodeCanvas, value, {
+      format: 'CODE128',
+      lineColor: '#16181a',
+      background: 'rgba(0,0,0,0)',
+      width: 4,
+      height: 200,
+      displayValue: false,
+      margin: 0
+    });
+    ctx.drawImage(barcodeCanvas, x, y, w, h);
+  }catch(e){
+    ctx.save();
+    ctx.fillStyle = '#e5484d';
+    ctx.font = '400 20px "JetBrains Mono", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText('ENCODING ERROR', x + w/2, y + h/2);
+    ctx.restore();
+  }
+}
+
+function drawCaption(ctx, tag, value, hasValue, x, y, w, h, boxed){
+  ctx.save();
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#16181a';
+  ctx.font = '700 40px "Space Mono", monospace';
+  ctx.fillText(tag, x, y + h/2);
+  const tagW = ctx.measureText(tag).width;
+  const extraGap = boxed ? 28 : 28 + (3 * 26); // +3 char-widths of extra space for P/N
+  const valueX = x + tagW + extraGap;
+
+  ctx.font = '700 42px "Space Mono", monospace';
+  ctx.fillStyle = hasValue ? '#16181a' : '#aab0b4';
+
+  if(boxed){
+    ctx.font = '700 42px "Space Mono", monospace';
+    const charW = ctx.measureText('0').width;
+    const boxW = charW * 17;
+    const textW = ctx.measureText(value).width;
+    const boxH = h * 0.62;
+    const boxY = y + (h - boxH)/2;
+    // center the box itself where the flexible row would have placed it,
+    // then center the text inside the box so left/right margins match
+    const sidePad = Math.max((boxW - textW) / 2, 10);
+    ctx.strokeStyle = hasValue ? '#16181a' : '#b7bcbf';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(valueX, boxY, boxW, boxH);
+    ctx.textAlign = 'center';
+    ctx.fillText(value, valueX + boxW/2, y + h/2);
+    ctx.textAlign = 'left';
+  } else {
+    ctx.fillText(value, valueX, y + h/2);
+  }
+  ctx.restore();
+}
+
+async function buildLabelCanvas(){
+  if(document.fonts && document.fonts.ready){ await document.fonts.ready; }
+
+  const W = 1500, H = 750;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#e9edf0');
+  grad.addColorStop(0.45, '#dde2e6');
+  grad.addColorStop(1, '#e5e9ec');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  const padX = 55, padTop = 45;
+  const contentW = W - padX*2;
+  let y = padTop;
+
+  const refText = refInput.value.trim();
+  ctx.save();
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.font = '700 44px "Space Mono", monospace';
+  ctx.fillStyle = refText ? '#16181a' : '#aab0b4';
+  ctx.fillText(refText || 'MODEL / REF', padX, y);
+  ctx.restore();
+  y += 78;
+
+  const barcodeH = 207; // 10% taller than before (188 -> 207)
+  const serialBarcodeW = contentW * 0.75; // S/N: 25% shorter
+  const partBarcodeW = contentW * 0.80;   // P/N: 20% shorter
+  await drawBarcodeOnCanvas(ctx, serialInput.value, padX, y, serialBarcodeW, barcodeH);
+  y += barcodeH + 16;
+
+  const snValue = serialInput.value.trim();
+  drawCaption(ctx, 'S/N', snValue || '— — — — — — —', !!snValue, padX, y, contentW, 84, true);
+  y += 84 + 12;
+
+  await drawBarcodeOnCanvas(ctx, partInput.value, padX, y, partBarcodeW, barcodeH);
+  y += barcodeH + 16;
+
+  const pnValue = partInput.value.trim();
+  drawCaption(ctx, 'P/N', pnValue || '— — — — — — —', !!pnValue, padX, y, contentW, 84, false);
+
+  return canvas;
+}
+
+document.getElementById('downloadBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('downloadBtn');
+  const original = btn.textContent;
+  btn.textContent = 'Preparing…';
+  try{
+    const canvas = await buildLabelCanvas();
+    const link = document.createElement('a');
+    const sn = serialInput.value.trim() || 'label';
+    link.download = sn.replace(/[^a-z0-9\-_]/gi, '_') + '_barcode.jpg';
+    link.href = canvas.toDataURL('image/jpeg', 0.95);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }catch(e){
+    alert('Could not generate the download. Please try again.');
+  }finally{
+    btn.textContent = original;
+  }
+});
+
+// initial state
+renderRef('');
+renderBarcode('serial', '');
+renderBarcode('part', '');
+</script>
+</body>
+</html>
